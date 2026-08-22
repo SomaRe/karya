@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Karya</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f8f9fa;
+  --sidebar-bg: #1a1b26;
+  --sidebar-hover: #24283b;
+  --sidebar-active: #414868;
+  --sidebar-text: #c0caf5;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --muted: #64748b;
+  --accent: #3b82f6;
+  --high: #ef4444;
+  --medium: #f59e0b;
+  --low: #22c55e;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.logo {
+  padding: 18px 16px 14px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: #bb9af7;
+  border-bottom: 1px solid #2a2d3e;
+  flex-shrink: 0;
+}
+
+.sidebar-section { padding: 8px 0; }
+
+.sidebar-label {
+  padding: 6px 16px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #565f89;
+}
+
+.nav-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-item:hover { background: var(--sidebar-hover); }
+.nav-item.active { background: var(--sidebar-active); color: #fff; }
+.nav-item.epic { padding-left: 28px; font-size: 12px; color: #9ece6a; }
+.nav-item.epic.active { color: #fff; }
+.nav-item.all-epics { color: #7aa2f7; font-size: 12px; }
+
+/* ── Main ── */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.toolbar {
+  padding: 14px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.menu-btn {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text);
+  padding: 2px 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.toolbar-title {
+  font-size: 15px;
+  font-weight: 600;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+select {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* ── Ticket table ── */
+.ticket-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.ticket-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ticket-table th {
+  padding: 9px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.ticket-row {
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.ticket-row:hover { background: #f1f5f9; }
+.ticket-row td { padding: 10px 16px; font-size: 13px; vertical-align: middle; }
+
+.ticket-id {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.priority-pip {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 7px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.pip-high   { background: var(--high); }
+.pip-medium { background: var(--medium); }
+.pip-low    { background: var(--low); }
+
+.title-cell { display: flex; align-items: center; }
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.s-backlog     { background: #f1f5f9; color: #64748b; }
+.s-in-progress { background: #eff6ff; color: #2563eb; }
+.s-review      { background: #fffbeb; color: #d97706; }
+.s-done        { background: #f0fdf4; color: #16a34a; }
+
+.flag { color: var(--high); margin-left: 6px; font-size: 13px; }
+.epic-tag { font-size: 11px; color: var(--muted); }
+
+.empty-state {
+  padding: 60px 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* ── Overlays ── */
+.overlay, .sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: none;
+}
+.overlay        { z-index: 50; }
+.sidebar-overlay { z-index: 40; }
+.overlay.open        { display: block; }
+.sidebar-overlay.open { display: block; }
+
+/* ── Detail drawer ── */
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 460px;
+  max-width: 100vw;
+  height: 100vh;
+  background: var(--surface);
+  box-shadow: -4px 0 24px rgba(0,0,0,0.12);
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+}
+.drawer.open { transform: translateX(0); }
+
+.drawer-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.drawer-id {
+  font-family: 'SF Mono', monospace;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  color: var(--muted);
+  line-height: 1;
+  padding: 2px 6px;
+}
+.close-btn:hover { color: var(--text); }
+
+.drawer-body {
+  padding: 20px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.drawer-title {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 18px;
+  line-height: 1.4;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 7px 10px;
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+.meta-label { color: var(--muted); font-weight: 500; padding: 1px 0; }
+.meta-value { padding: 1px 0; display: flex; align-items: center; gap: 6px; }
+
+.ticket-body {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--text);
+  word-break: break-word;
+}
+
+/* Markdown rendered content */
+.ticket-body h1,
+.ticket-body h2,
+.ticket-body h3,
+.ticket-body h4 {
+  margin: 16px 0 8px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.ticket-body h1 { font-size: 18px; }
+.ticket-body h2 { font-size: 16px; }
+.ticket-body h3 { font-size: 14px; }
+.ticket-body h4 { font-size: 13px; }
+
+.ticket-body p { margin: 8px 0; }
+
+.ticket-body ul,
+.ticket-body ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.ticket-body li { margin: 3px 0; }
+
+.ticket-body code {
+  background: #f1f5f9;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+}
+
+.ticket-body pre {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+
+.ticket-body pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.ticket-body blockquote {
+  border-left: 3px solid var(--border);
+  margin: 10px 0;
+  padding-left: 12px;
+  color: var(--muted);
+}
+
+.ticket-body a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.ticket-body a:hover { text-decoration: underline; }
+
+.ticket-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 12px;
+}
+
+.ticket-body th,
+.ticket-body td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.ticket-body th {
+  background: var(--bg);
+  font-weight: 600;
+}
+
+.ticket-body hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 14px 0;
+}
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .menu-btn { display: block; }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 41;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  .toolbar { padding: 10px 14px; gap: 8px; }
+
+  /* Hide "Status" text label to save space, keep the select */
+  .filter-group > label[for="f-status"] { display: none; }
+
+  .ticket-row td { padding: 10px; }
+  .ticket-table th { padding: 8px 10px; }
+
+  /* Hide Epic column — visible in ticket detail drawer */
+  .col-epic { display: none; }
+
+  .drawer { width: 100vw; }
+}
+</style>
+</head>
+<body>
+
+<div class="sidebar" id="sidebar">
+  <div class="logo">karya</div>
+  <div id="nav"></div>
+</div>
+
+<div class="main">
+  <div class="toolbar">
+    <button class="menu-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+    <span class="toolbar-title" id="toolbar-title">Tickets</span>
+    <div class="filter-group">
+      <label for="f-status">Status</label>
+      <select id="f-status" onchange="applyFilters()">
+        <option value="">All</option>
+        <option value="backlog">Backlog</option>
+        <option value="in-progress">In Progress</option>
+        <option value="review">Review</option>
+        <option value="done">Done</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <input type="checkbox" id="f-flagged" onchange="applyFilters()">
+      <label for="f-flagged">Flagged</label>
+    </div>
+  </div>
+  <div class="ticket-list" id="ticket-list"></div>
+</div>
+
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <span class="drawer-id" id="d-id"></span>
+    <button class="close-btn" onclick="closeDrawer()">×</button>
+  </div>
+  <div class="drawer-body" id="d-body"></div>
+</div>
+
+<script>
+const state = { project: null, epic: null };
+
+// ── API ──────────────────────────────────────────────
+async function apiFetch(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+// ── Boot ─────────────────────────────────────────────
+async function init() {
+  try {
+    const projects = await apiFetch('/api/projects');
+    state.project = (projects.find(p => p.active) || projects[0])?.name || null;
+    await renderNav(projects);
+    await loadTickets();
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+// ── Sidebar ───────────────────────────────────────────
+function toggleSidebar() {
+  const open = document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('open', open);
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+}
+
+async function renderNav(projects) {
+  let html = '<div class="sidebar-section"><div class="sidebar-label">Projects</div>';
+  for (const p of projects) {
+    html += navItem(p.name, p.name === state.project, `selectProject('${esc(p.name)}')`);
+  }
+  html += '</div>';
+
+  if (state.project) {
+    try {
+      const epics = await apiFetch(`/api/epics?project=${enc(state.project)}`);
+      if (epics?.length) {
+        html += '<div class="sidebar-section"><div class="sidebar-label">Epics</div>';
+        html += navItem('All epics', !state.epic, `selectEpic(null)`, 'all-epics');
+        for (const e of epics) {
+          html += navItem(e.name, e.name === state.epic, `selectEpic('${esc(e.name)}')`, 'epic');
+        }
+        html += '</div>';
+      }
+    } catch (_) {}
+  }
+
+  document.getElementById('nav').innerHTML = html;
+}
+
+function navItem(label, active, onclick, extra = '') {
+  return `<div class="nav-item ${extra}${active ? ' active' : ''}" onclick="${onclick}">${escHtml(label)}</div>`;
+}
+
+async function selectProject(name) {
+  state.project = decodeURIComponent(name);
+  state.epic = null;
+  closeSidebar();
+  const projects = await apiFetch('/api/projects');
+  await renderNav(projects);
+  await loadTickets();
+}
+
+async function selectEpic(name) {
+  state.epic = name ? decodeURIComponent(name) : null;
+  closeSidebar();
+  const projects = await apiFetch('/api/projects');
+  await renderNav(projects);
+  await loadTickets();
+}
+
+// ── Ticket list ───────────────────────────────────────
+function applyFilters() { loadTickets(); }
+
+async function loadTickets() {
+  if (!state.project) { showError('No project selected.'); return; }
+
+  const params = new URLSearchParams({ project: state.project });
+  if (state.epic) params.set('epic', state.epic);
+  const status = document.getElementById('f-status').value;
+  if (status) params.set('status', status);
+  if (document.getElementById('f-flagged').checked) params.set('flagged', 'true');
+
+  document.getElementById('toolbar-title').textContent =
+    state.epic ? `${state.project} / ${state.epic}` : state.project;
+
+  try {
+    const tickets = await apiFetch(`/api/tickets?${params}`);
+    renderTickets(tickets || []);
+  } catch (e) { showError(e.message); }
+}
+
+function renderTickets(tickets) {
+  const el = document.getElementById('ticket-list');
+  if (!tickets.length) {
+    el.innerHTML = '<div class="empty-state">No tickets found.</div>';
+    return;
+  }
+  const rows = tickets.map(t => {
+    const flag = t.flagged ? `<span class="flag" title="Flagged">⚑</span>` : '';
+    return `<tr class="ticket-row" onclick="openTicket('${esc(t.id)}')">
+      <td><span class="ticket-id">${escHtml(t.id)}</span>${flag}</td>
+      <td><div class="title-cell"><span class="priority-pip pip-${t.priority}"></span>${escHtml(t.title)}</div></td>
+      <td><span class="status-badge s-${t.status}">${escHtml(t.status)}</span></td>
+      <td class="col-epic"><span class="epic-tag">${escHtml(t.epic)}</span></td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `<table class="ticket-table">
+    <thead><tr>
+      <th style="width:110px">ID</th>
+      <th>Title</th>
+      <th style="width:120px">Status</th>
+      <th class="col-epic" style="width:120px">Epic</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+// ── Detail drawer ─────────────────────────────────────
+async function openTicket(id) {
+  try {
+    const params = new URLSearchParams({ project: state.project });
+    const t = await apiFetch(`/api/tickets/${id}?${params}`);
+    showDrawer(t);
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+function showDrawer(t) {
+  document.getElementById('d-id').textContent = t.id;
+
+  const fmt = s => s ? new Date(s).toLocaleString() : '—';
+  const flag = t.flagged ? ' <span class="flag">⚑</span>' : '';
+
+  document.getElementById('d-body').innerHTML = `
+    <div class="drawer-title">${escHtml(t.title)}${flag}</div>
+    <div class="meta-grid">
+      <span class="meta-label">Status</span>
+      <span class="meta-value"><span class="status-badge s-${t.status}">${escHtml(t.status)}</span></span>
+      <span class="meta-label">Priority</span>
+      <span class="meta-value"><span class="priority-pip pip-${t.priority}"></span>${escHtml(t.priority)}</span>
+      <span class="meta-label">Type</span>
+      <span class="meta-value">${escHtml(t.type)}</span>
+      <span class="meta-label">Epic</span>
+      <span class="meta-value">${escHtml(t.epic)}</span>
+      <span class="meta-label">Created</span>
+      <span class="meta-value">${fmt(t.created)}</span>
+      <span class="meta-label">Modified</span>
+      <span class="meta-value">${fmt(t.modified)}</span>
+    </div>
+    ${t.body ? `<div class="ticket-body">${marked.parse(t.body || '')}</div>` : ''}
+  `;
+
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('drawer').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('drawer').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeDrawer(); closeSidebar(); }
+});
+
+// ── Helpers ───────────────────────────────────────────
+function showError(msg) {
+  document.getElementById('ticket-list').innerHTML = `<div class="empty-state">${escHtml(msg)}</div>`;
+}
+
+function esc(s) { return encodeURIComponent(s); }
+function enc(s) { return encodeURIComponent(s); }
+function escHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+init();
+</script>
+</body>
+</html>
