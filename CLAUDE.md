@@ -2,13 +2,14 @@
 
 ## What It Is
 
-A filesystem-native project tracker for a single human + AI agents. No server, no auth, no UI. CLI is the primary interface. Sanskrit: कार्य (work/task/deed).
+A filesystem-native project tracker for a single human + AI agents. It has a CLI and an embedded, read-only local web UI; there is no auth or remote server. Sanskrit: कार्य (work/task/deed).
 
 ## Language & Build
 
 - **Go** — single binary, fast, easy to distribute
 - Build: `make build` → `./karya`
 - Install system-wide: `make install` → `/usr/local/bin/karya`
+- Test: `make test`
 - Go binary: `/usr/local/go/bin/go`
 
 ## Hierarchy
@@ -19,7 +20,7 @@ Project → Epic → Ticket
 
 - **Project** — top-level unit of work
 - **Epic** — folder grouping related tickets (slug-named, e.g. `user-auth`)
-- **Ticket** — actual unit of work; type is `task` or `bug`
+- **Ticket** — actual unit of work; type is `task`, `bug`, or `spike`
 
 ## Storage Layout
 
@@ -64,7 +65,7 @@ Description, notes, links go here.
 | `id`       | yes      | auto       | `<PREFIX>-<NNN>`                            |
 | `title`    | yes      | —          | string                                      |
 | `status`   | yes      | `backlog`  | `backlog` `in-progress` `review` `done`     |
-| `type`     | no       | `task`     | `task` `bug`                                |
+| `type`     | no       | `task`     | `task` `bug` `spike`                        |
 | `priority` | no       | `medium`   | `low` `medium` `high`                       |
 | `epic`     | no       | —          | epic folder name (slug)                     |
 | `flagged`  | no       | `false`    | bool — marks impediments/blockers           |
@@ -82,14 +83,18 @@ karya epic new "User Auth"
 karya epic ls
 
 # Tickets
-karya ticket new "Login page" --epic user-auth [--type bug] [--priority high]
-karya ticket ls [--epic user-auth] [--status in-progress] [--flagged] [--json]
+karya ticket new "Login page" --epic user-auth [--type bug] [--priority high] [--description "..."]
+karya ticket ls [--epic user-auth] [--status in-progress] [--type bug] [--grep login] [--flagged] [--json]
 karya ticket set MYAPP-001 status in-progress
 karya ticket set MYAPP-001 priority high
+karya ticket set MYAPP-001 description "Updated description"
 karya ticket flag MYAPP-001        # toggle flagged
 karya ticket show MYAPP-001        # print ticket to stdout
 karya ticket open MYAPP-001        # open ticket.md in $EDITOR
 karya ticket delete MYAPP-001      # delete ticket (confirms first)
+
+# Web UI
+karya serve [--port 8787]
 ```
 
 `--json` flag on `ticket ls` for AI agent consumption.
@@ -104,8 +109,11 @@ karya/
 │   ├── root.go               # root cobra command + Execute()
 │   ├── project.go            # project new, project ls, use
 │   ├── epic.go               # epic new, epic ls; activeProjectDir() helper
-│   └── ticket.go             # ticket new, set, flag, show, open, ls
+│   ├── ticket.go             # ticket new, set, flag, show, open, ls
+│   ├── serve.go              # embedded local web UI server
+│   └── web/index.html        # embedded web UI assets
 └── internal/
+    ├── api/handler.go        # read-only web UI API
     ├── model/model.go        # Ticket, Epic, Project structs; Status/Priority/Type enums
     ├── store/store.go        # read/write tickets+epics+projects; NextID; SortTickets
     └── config/config.go      # global config (active project); ProjectsDir()
@@ -119,4 +127,4 @@ karya/
 
 ## Status Scanning
 
-No index, no background server. Every command scans `ticket.md` frontmatter on the fly. Fast enough at personal project scale.
+No index or background process. CLI commands and web API requests scan `ticket.md` frontmatter on demand, which is fast enough at personal-project scale.

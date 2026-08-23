@@ -1,0 +1,15 @@
+/karya
+
+# Go test and profiling output
+*.test
+*.out
+coverage.out
+*.prof
+
+# Local environment and editor files
+.env
+.env.*
+!.env.example
+.DS_Store
+*.swp
+*.swo
