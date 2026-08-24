@@ -1,656 +1,159 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Karya</title>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --bg: #f8f9fa;
-  --sidebar-bg: #1a1b26;
-  --sidebar-hover: #24283b;
-  --sidebar-active: #414868;
-  --sidebar-text: #c0caf5;
-  --surface: #ffffff;
-  --border: #e2e8f0;
-  --text: #1e293b;
-  --muted: #64748b;
-  --accent: #3b82f6;
-  --high: #ef4444;
-  --medium: #f59e0b;
-  --low: #22c55e;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  height: 100vh;
-  overflow: hidden;
-  display: flex;
-}
-
-/* ── Sidebar ── */
-.sidebar {
-  width: 220px;
-  min-width: 220px;
-  background: var(--sidebar-bg);
-  color: var(--sidebar-text);
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-.logo {
-  padding: 18px 16px 14px;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 3px;
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  color: #bb9af7;
-  border-bottom: 1px solid #2a2d3e;
-  flex-shrink: 0;
-}
-
-.sidebar-section { padding: 8px 0; }
-
-.sidebar-label {
-  padding: 6px 16px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: #565f89;
-}
-
-.nav-item {
-  padding: 8px 16px;
-  cursor: pointer;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: background 0.1s;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.nav-item:hover { background: var(--sidebar-hover); }
-.nav-item.active { background: var(--sidebar-active); color: #fff; }
-.nav-item.epic { padding-left: 28px; font-size: 12px; color: #9ece6a; }
-.nav-item.epic.active { color: #fff; }
-.nav-item.all-epics { color: #7aa2f7; font-size: 12px; }
-
-/* ── Main ── */
-.main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.toolbar {
-  padding: 14px 20px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.menu-btn {
-  display: none;
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  color: var(--text);
-  padding: 2px 4px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.toolbar-title {
-  font-size: 15px;
-  font-weight: 600;
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.filter-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-select {
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: white;
-  font-size: 13px;
-  color: var(--text);
-  cursor: pointer;
-}
-
-/* ── Ticket table ── */
-.ticket-list {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.ticket-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.ticket-table th {
-  padding: 9px 16px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--muted);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.ticket-row {
-  cursor: pointer;
-  border-bottom: 1px solid var(--border);
-  transition: background 0.1s;
-}
-.ticket-row:hover { background: #f1f5f9; }
-.ticket-row td { padding: 10px 16px; font-size: 13px; vertical-align: middle; }
-
-.ticket-id {
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.priority-pip {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  margin-right: 7px;
-  flex-shrink: 0;
-  vertical-align: middle;
-}
-.pip-high   { background: var(--high); }
-.pip-medium { background: var(--medium); }
-.pip-low    { background: var(--low); }
-
-.title-cell { display: flex; align-items: center; }
-
-.status-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-.s-backlog     { background: #f1f5f9; color: #64748b; }
-.s-in-progress { background: #eff6ff; color: #2563eb; }
-.s-review      { background: #fffbeb; color: #d97706; }
-.s-done        { background: #f0fdf4; color: #16a34a; }
-
-.flag { color: var(--high); margin-left: 6px; font-size: 13px; }
-.epic-tag { font-size: 11px; color: var(--muted); }
-
-.empty-state {
-  padding: 60px 24px;
-  text-align: center;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-/* ── Overlays ── */
-.overlay, .sidebar-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.35);
-  display: none;
-}
-.overlay        { z-index: 50; }
-.sidebar-overlay { z-index: 40; }
-.overlay.open        { display: block; }
-.sidebar-overlay.open { display: block; }
-
-/* ── Detail drawer ── */
-.drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 460px;
-  max-width: 100vw;
-  height: 100vh;
-  background: var(--surface);
-  box-shadow: -4px 0 24px rgba(0,0,0,0.12);
-  z-index: 51;
-  display: flex;
-  flex-direction: column;
-  transform: translateX(100%);
-  transition: transform 0.2s ease;
-}
-.drawer.open { transform: translateX(0); }
-
-.drawer-header {
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-.drawer-id {
-  font-family: 'SF Mono', monospace;
-  font-size: 12px;
-  color: var(--muted);
-  font-weight: 600;
-}
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 22px;
-  cursor: pointer;
-  color: var(--muted);
-  line-height: 1;
-  padding: 2px 6px;
-}
-.close-btn:hover { color: var(--text); }
-
-.drawer-body {
-  padding: 20px;
-  flex: 1;
-  overflow-y: auto;
-}
-
-.drawer-title {
-  font-size: 17px;
-  font-weight: 600;
-  margin-bottom: 18px;
-  line-height: 1.4;
-}
-
-.meta-grid {
-  display: grid;
-  grid-template-columns: 90px 1fr;
-  gap: 7px 10px;
-  margin-bottom: 20px;
-  font-size: 13px;
-}
-.meta-label { color: var(--muted); font-weight: 500; padding: 1px 0; }
-.meta-value { padding: 1px 0; display: flex; align-items: center; gap: 6px; }
-
-.ticket-body {
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-  font-size: 13px;
-  line-height: 1.75;
-  color: var(--text);
-  word-break: break-word;
-}
-
-/* Markdown rendered content */
-.ticket-body h1,
-.ticket-body h2,
-.ticket-body h3,
-.ticket-body h4 {
-  margin: 16px 0 8px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.ticket-body h1 { font-size: 18px; }
-.ticket-body h2 { font-size: 16px; }
-.ticket-body h3 { font-size: 14px; }
-.ticket-body h4 { font-size: 13px; }
-
-.ticket-body p { margin: 8px 0; }
-
-.ticket-body ul,
-.ticket-body ol {
-  margin: 8px 0;
-  padding-left: 20px;
-}
-
-.ticket-body li { margin: 3px 0; }
-
-.ticket-body code {
-  background: #f1f5f9;
-  padding: 2px 5px;
-  border-radius: 4px;
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: 12px;
-}
-
-.ticket-body pre {
-  background: #1e293b;
-  color: #e2e8f0;
-  padding: 12px 14px;
-  border-radius: 8px;
-  overflow-x: auto;
-  margin: 10px 0;
-}
-
-.ticket-body pre code {
-  background: transparent;
-  padding: 0;
-  color: inherit;
-}
-
-.ticket-body blockquote {
-  border-left: 3px solid var(--border);
-  margin: 10px 0;
-  padding-left: 12px;
-  color: var(--muted);
-}
-
-.ticket-body a {
-  color: var(--accent);
-  text-decoration: none;
-}
-.ticket-body a:hover { text-decoration: underline; }
-
-.ticket-body table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 10px 0;
-  font-size: 12px;
-}
-
-.ticket-body th,
-.ticket-body td {
-  border: 1px solid var(--border);
-  padding: 6px 10px;
-  text-align: left;
-}
-
-.ticket-body th {
-  background: var(--bg);
-  font-weight: 600;
-}
-
-.ticket-body hr {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 14px 0;
-}
-
-/* ── Mobile ── */
-@media (max-width: 640px) {
-  .menu-btn { display: block; }
-
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100vh;
-    z-index: 41;
-    transform: translateX(-100%);
-    transition: transform 0.2s ease;
-  }
-  .sidebar.open { transform: translateX(0); }
-
-  .toolbar { padding: 10px 14px; gap: 8px; }
-
-  /* Hide "Status" text label to save space, keep the select */
-  .filter-group > label[for="f-status"] { display: none; }
-
-  .ticket-row td { padding: 10px; }
-  .ticket-table th { padding: 8px 10px; }
-
-  /* Hide Epic column — visible in ticket detail drawer */
-  .col-epic { display: none; }
-
-  .drawer { width: 100vw; }
-}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Karya</title>
+  <style>
+    :root { color-scheme: light; --ink:#17222e; --muted:#637083; --line:#dce2e8; --paper:#fff; --wash:#f4f6f8; --navy:#172c3f; --accent:#176b87; --danger:#a63232; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:var(--wash); color:var(--ink); font:15px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    button,input,select { font:inherit; }
+    button { cursor:pointer; }
+    .shell { display:grid; grid-template-columns:260px minmax(0,1fr); min-height:100vh; }
+    .sidebar { background:var(--navy); color:#ecf4f6; padding:22px 14px; }
+    .brand { margin:0 8px 24px; font:700 20px/1 ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:.16em; text-transform:uppercase; }
+    .nav-label { margin:22px 8px 7px; color:#a7c0c8; font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+    .nav-button { display:block; width:100%; border:0; border-radius:6px; background:transparent; color:inherit; padding:9px 10px; text-align:left; overflow-wrap:anywhere; }
+    .nav-button:hover,.nav-button.active { background:#29485a; }
+    .nav-button.area { color:#cce1e4; padding-left:18px; font-size:14px; }
+    .main { min-width:0; padding:28px clamp(16px,4vw,48px); }
+    .topline { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:22px; }
+    h1 { margin:0; font-size:clamp(24px,4vw,36px); letter-spacing:-.04em; }
+    .subtitle { margin:5px 0 0; color:var(--muted); }
+    .menu { display:none; border:1px solid var(--line); border-radius:6px; background:var(--paper); padding:7px 10px; }
+    .error { display:none; margin:0 0 16px; border-left:4px solid var(--danger); background:#fff2f2; color:#6e1b1b; padding:10px 12px; }
+    .error.visible { display:block; }
+    .filters { display:grid; grid-template-columns:repeat(5,minmax(120px,1fr)); gap:10px; margin-bottom:18px; }
+    label { color:var(--muted); font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+    label span { display:block; margin-bottom:4px; }
+    input,select { width:100%; min-height:38px; border:1px solid var(--line); border-radius:5px; background:var(--paper); color:var(--ink); padding:7px 9px; }
+    .cards { display:grid; gap:8px; }
+    .ticket { display:grid; grid-template-columns:116px minmax(0,1fr) auto; gap:14px; align-items:center; width:100%; border:1px solid var(--line); border-radius:7px; background:var(--paper); color:inherit; padding:14px; text-align:left; }
+    .ticket:hover { border-color:#9db3bd; box-shadow:0 2px 10px #17222e12; }
+    .key { color:var(--accent); font:700 13px/1 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .ticket-title { display:block; font-weight:700; overflow-wrap:anywhere; }
+    .ticket-meta { display:block; margin-top:3px; color:var(--muted); font-size:13px; }
+    .badge { border-radius:999px; background:#e8f0f2; color:#31515e; padding:4px 8px; font-size:12px; font-weight:700; white-space:nowrap; }
+    .empty { border:1px dashed #b8c5cc; border-radius:7px; color:var(--muted); padding:32px 18px; text-align:center; }
+    .overlay { display:none; }
+    .drawer { position:fixed; z-index:3; top:0; right:0; width:min(560px,100vw); height:100vh; transform:translateX(100%); transition:transform .2s ease; background:var(--paper); box-shadow:-8px 0 30px #17222e33; overflow:auto; padding:26px; }
+    .drawer.open { transform:translateX(0); }
+    .drawer-top { display:flex; justify-content:space-between; gap:12px; align-items:center; border-bottom:1px solid var(--line); padding-bottom:16px; }
+    .close { border:0; background:transparent; color:var(--muted); font-size:26px; line-height:1; }
+    .detail-title { margin:22px 0 18px; font-size:26px; line-height:1.2; overflow-wrap:anywhere; }
+    .metadata { display:grid; grid-template-columns:120px 1fr; gap:8px 12px; margin:0; }
+    .metadata dt { color:var(--muted); font-size:13px; }
+    .metadata dd { margin:0; overflow-wrap:anywhere; }
+    .description { margin-top:24px; border-top:1px solid var(--line); padding-top:18px; }
+    .description h2 { margin:0 0 8px; font-size:15px; }
+    pre { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; font:14px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    @media (max-width:760px) { .shell { display:block; } .sidebar { position:fixed; z-index:4; inset:0 auto 0 0; width:min(280px,82vw); transform:translateX(-100%); transition:transform .2s ease; overflow:auto; } .sidebar.open { transform:translateX(0); } .overlay.open { display:block; position:fixed; z-index:2; inset:0; background:#17222e66; } .menu { display:block; } .main { padding:18px 14px; } .filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .filters label:first-child { grid-column:span 2; } .ticket { grid-template-columns:1fr auto; } .ticket .key { grid-column:1; } .ticket .ticket-copy { grid-column:1 / -1; grid-row:2; } }
+  </style>
 </head>
 <body>
-
-<div class="sidebar" id="sidebar">
-  <div class="logo">karya</div>
-  <div id="nav"></div>
-</div>
-
-<div class="main">
-  <div class="toolbar">
-    <button class="menu-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
-    <span class="toolbar-title" id="toolbar-title">Tickets</span>
-    <div class="filter-group">
-      <label for="f-status">Status</label>
-      <select id="f-status" onchange="applyFilters()">
-        <option value="">All</option>
-        <option value="backlog">Backlog</option>
-        <option value="in-progress">In Progress</option>
-        <option value="review">Review</option>
-        <option value="done">Done</option>
-      </select>
-    </div>
-    <div class="filter-group">
-      <input type="checkbox" id="f-flagged" onchange="applyFilters()">
-      <label for="f-flagged">Flagged</label>
-    </div>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar"><p class="brand">Karya</p><nav id="navigation" aria-label="Projects and areas"></nav></aside>
+    <main class="main">
+      <header class="topline"><div><h1 id="heading">Tickets</h1><p class="subtitle" id="subheading">Choose a project to browse its tickets.</p></div><button class="menu" id="menu" type="button" aria-label="Open navigation">Menu</button></header>
+      <div class="error" id="error" role="alert"></div>
+      <section class="filters" aria-label="Ticket filters">
+        <label><span>Title search</span><input id="search" type="search" placeholder="Search titles"></label>
+        <label><span>Status</span><select id="status"><option value="">All statuses</option><option value="backlog">Backlog</option><option value="in-progress">In progress</option><option value="review">Review</option><option value="done">Done</option><option value="cancelled">Cancelled</option></select></label>
+        <label><span>Type</span><select id="type"><option value="">All types</option><option value="task">Task</option><option value="bug">Bug</option><option value="spike">Spike</option></select></label>
+        <label><span>Priority</span><select id="priority"><option value="">All priorities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+        <label><span>Flagged</span><select id="flagged"><option value="">All tickets</option><option value="true">Flagged</option><option value="false">Not flagged</option></select></label>
+      </section>
+      <section class="cards" id="tickets" aria-live="polite"></section>
+    </main>
   </div>
-  <div class="ticket-list" id="ticket-list"></div>
-</div>
+  <div class="overlay" id="overlay"></div>
+  <aside class="drawer" id="drawer" aria-label="Ticket details"><div class="drawer-top"><span class="key" id="detail-key"></span><button class="close" id="close" type="button" aria-label="Close ticket details">&times;</button></div><div id="detail"></div></aside>
+  <script>
+    const state = { projects: [], project: null, area: "", areas: [], searchTimer: null };
+    const $ = id => document.getElementById(id);
+    const filters = ["search", "status", "type", "priority", "flagged"];
 
-<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
-<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
-<div class="drawer" id="drawer">
-  <div class="drawer-header">
-    <span class="drawer-id" id="d-id"></span>
-    <button class="close-btn" onclick="closeDrawer()">×</button>
-  </div>
-  <div class="drawer-body" id="d-body"></div>
-</div>
+    function element(tag, text, className) { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; }
+    function showError(message) { const box = $("error"); box.textContent = message; box.classList.add("visible"); }
+    function clearError() { $("error").textContent = ""; $("error").classList.remove("visible"); }
+    async function request(path) { const response = await fetch(path); const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body && body.error ? body.error.message : `Request failed (${response.status})`); return body; }
+    function closeNavigation() { $("sidebar").classList.remove("open"); $("overlay").classList.remove("open"); }
+    function closeDetail() { $("drawer").classList.remove("open"); $("overlay").classList.remove("open"); }
 
-<script>
-const state = { project: null, epic: null };
-
-// ── API ──────────────────────────────────────────────
-async function apiFetch(path) {
-  const r = await fetch(path);
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-
-// ── Boot ─────────────────────────────────────────────
-async function init() {
-  try {
-    const projects = await apiFetch('/api/projects');
-    state.project = (projects.find(p => p.active) || projects[0])?.name || null;
-    await renderNav(projects);
-    await loadTickets();
-  } catch (e) {
-    showError(e.message);
-  }
-}
-
-// ── Sidebar ───────────────────────────────────────────
-function toggleSidebar() {
-  const open = document.getElementById('sidebar').classList.toggle('open');
-  document.getElementById('sidebar-overlay').classList.toggle('open', open);
-}
-
-function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebar-overlay').classList.remove('open');
-}
-
-async function renderNav(projects) {
-  let html = '<div class="sidebar-section"><div class="sidebar-label">Projects</div>';
-  for (const p of projects) {
-    html += navItem(p.name, p.name === state.project, `selectProject('${esc(p.name)}')`);
-  }
-  html += '</div>';
-
-  if (state.project) {
-    try {
-      const epics = await apiFetch(`/api/epics?project=${enc(state.project)}`);
-      if (epics?.length) {
-        html += '<div class="sidebar-section"><div class="sidebar-label">Epics</div>';
-        html += navItem('All epics', !state.epic, `selectEpic(null)`, 'all-epics');
-        for (const e of epics) {
-          html += navItem(e.name, e.name === state.epic, `selectEpic('${esc(e.name)}')`, 'epic');
-        }
-        html += '</div>';
+    async function loadProjects() {
+      clearError();
+      try {
+        state.projects = await request("/api/v1/projects");
+        if (state.projects.length) await selectProject(state.projects[0].key);
+        else { renderNavigation(); renderTickets([]); $("subheading").textContent = "No projects are available."; }
+      } catch (error) { showError(error.message); }
+    }
+    async function selectProject(key) {
+      state.project = key; state.area = ""; closeNavigation();
+      try { state.areas = await request(`/api/v1/projects/${encodeURIComponent(key)}/areas`); renderNavigation(); await loadTickets(); }
+      catch (error) { showError(error.message); }
+    }
+    function selectArea(slug) { state.area = slug; closeNavigation(); renderNavigation(); loadTickets(); }
+    function renderNavigation() {
+      const nav = $("navigation"); nav.replaceChildren();
+      if (state.projects.length) {
+        nav.append(element("p", "Projects", "nav-label"));
+        state.projects.forEach(project => { const button = element("button", `${project.key}  ${project.name}`, "nav-button"); if (project.key === state.project) button.classList.add("active"); button.addEventListener("click", () => selectProject(project.key)); nav.append(button); });
       }
-    } catch (_) {}
-  }
-
-  document.getElementById('nav').innerHTML = html;
-}
-
-function navItem(label, active, onclick, extra = '') {
-  return `<div class="nav-item ${extra}${active ? ' active' : ''}" onclick="${onclick}">${escHtml(label)}</div>`;
-}
-
-async function selectProject(name) {
-  state.project = decodeURIComponent(name);
-  state.epic = null;
-  closeSidebar();
-  const projects = await apiFetch('/api/projects');
-  await renderNav(projects);
-  await loadTickets();
-}
-
-async function selectEpic(name) {
-  state.epic = name ? decodeURIComponent(name) : null;
-  closeSidebar();
-  const projects = await apiFetch('/api/projects');
-  await renderNav(projects);
-  await loadTickets();
-}
-
-// ── Ticket list ───────────────────────────────────────
-function applyFilters() { loadTickets(); }
-
-async function loadTickets() {
-  if (!state.project) { showError('No project selected.'); return; }
-
-  const params = new URLSearchParams({ project: state.project });
-  if (state.epic) params.set('epic', state.epic);
-  const status = document.getElementById('f-status').value;
-  if (status) params.set('status', status);
-  if (document.getElementById('f-flagged').checked) params.set('flagged', 'true');
-
-  document.getElementById('toolbar-title').textContent =
-    state.epic ? `${state.project} / ${state.epic}` : state.project;
-
-  try {
-    const tickets = await apiFetch(`/api/tickets?${params}`);
-    renderTickets(tickets || []);
-  } catch (e) { showError(e.message); }
-}
-
-function renderTickets(tickets) {
-  const el = document.getElementById('ticket-list');
-  if (!tickets.length) {
-    el.innerHTML = '<div class="empty-state">No tickets found.</div>';
-    return;
-  }
-  const rows = tickets.map(t => {
-    const flag = t.flagged ? `<span class="flag" title="Flagged">⚑</span>` : '';
-    return `<tr class="ticket-row" onclick="openTicket('${esc(t.id)}')">
-      <td><span class="ticket-id">${escHtml(t.id)}</span>${flag}</td>
-      <td><div class="title-cell"><span class="priority-pip pip-${t.priority}"></span>${escHtml(t.title)}</div></td>
-      <td><span class="status-badge s-${t.status}">${escHtml(t.status)}</span></td>
-      <td class="col-epic"><span class="epic-tag">${escHtml(t.epic)}</span></td>
-    </tr>`;
-  }).join('');
-
-  el.innerHTML = `<table class="ticket-table">
-    <thead><tr>
-      <th style="width:110px">ID</th>
-      <th>Title</th>
-      <th style="width:120px">Status</th>
-      <th class="col-epic" style="width:120px">Epic</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
-}
-
-// ── Detail drawer ─────────────────────────────────────
-async function openTicket(id) {
-  try {
-    const params = new URLSearchParams({ project: state.project });
-    const t = await apiFetch(`/api/tickets/${id}?${params}`);
-    showDrawer(t);
-  } catch (e) { alert('Error: ' + e.message); }
-}
-
-function showDrawer(t) {
-  document.getElementById('d-id').textContent = t.id;
-
-  const fmt = s => s ? new Date(s).toLocaleString() : '—';
-  const flag = t.flagged ? ' <span class="flag">⚑</span>' : '';
-
-  document.getElementById('d-body').innerHTML = `
-    <div class="drawer-title">${escHtml(t.title)}${flag}</div>
-    <div class="meta-grid">
-      <span class="meta-label">Status</span>
-      <span class="meta-value"><span class="status-badge s-${t.status}">${escHtml(t.status)}</span></span>
-      <span class="meta-label">Priority</span>
-      <span class="meta-value"><span class="priority-pip pip-${t.priority}"></span>${escHtml(t.priority)}</span>
-      <span class="meta-label">Type</span>
-      <span class="meta-value">${escHtml(t.type)}</span>
-      <span class="meta-label">Epic</span>
-      <span class="meta-value">${escHtml(t.epic)}</span>
-      <span class="meta-label">Created</span>
-      <span class="meta-value">${fmt(t.created)}</span>
-      <span class="meta-label">Modified</span>
-      <span class="meta-value">${fmt(t.modified)}</span>
-    </div>
-    ${t.body ? `<div class="ticket-body">${marked.parse(t.body || '')}</div>` : ''}
-  `;
-
-  document.getElementById('overlay').classList.add('open');
-  document.getElementById('drawer').classList.add('open');
-}
-
-function closeDrawer() {
-  document.getElementById('overlay').classList.remove('open');
-  document.getElementById('drawer').classList.remove('open');
-}
-
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeDrawer(); closeSidebar(); }
-});
-
-// ── Helpers ───────────────────────────────────────────
-function showError(msg) {
-  document.getElementById('ticket-list').innerHTML = `<div class="empty-state">${escHtml(msg)}</div>`;
-}
-
-function esc(s) { return encodeURIComponent(s); }
-function enc(s) { return encodeURIComponent(s); }
-function escHtml(s) {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-init();
-</script>
+      if (state.project) {
+        nav.append(element("p", "Areas", "nav-label"));
+        const all = element("button", "All areas", "nav-button area"); if (!state.area) all.classList.add("active"); all.addEventListener("click", () => selectArea("")); nav.append(all);
+        state.areas.forEach(area => { const button = element("button", area.name, "nav-button area"); if (area.slug === state.area) button.classList.add("active"); button.addEventListener("click", () => selectArea(area.slug)); nav.append(button); });
+      }
+    }
+    async function loadTickets() {
+      if (!state.project) return;
+      clearError();
+      const query = new URLSearchParams({ project: state.project });
+      if (state.area) query.set("area", state.area);
+      filters.forEach(name => { const value = $(name).value.trim(); if (value) query.set(name, value); });
+      $("heading").textContent = state.project;
+      const area = state.areas.find(item => item.slug === state.area);
+      $("subheading").textContent = area ? `Tickets in ${area.name}` : "All tickets";
+      try { renderTickets(await request(`/api/v1/tickets?${query}`)); } catch (error) { renderTickets([]); showError(error.message); }
+    }
+    function renderTickets(tickets) {
+      const list = $("tickets"); list.replaceChildren();
+      if (!tickets.length) { list.append(element("p", "No tickets match these filters.", "empty")); return; }
+      tickets.forEach(ticket => {
+        const button = element("button", undefined, "ticket");
+        button.type = "button";
+        button.append(element("span", ticket.key, "key"));
+        const copy = element("span", undefined, "ticket-copy"); copy.append(element("span", ticket.title, "ticket-title"));
+        copy.append(element("span", `${ticket.type} · ${ticket.priority}${ticket.flagged ? " · flagged" : ""}`, "ticket-meta"));
+        button.append(copy); button.append(element("span", ticket.status, "badge"));
+        button.addEventListener("click", () => openTicket(ticket.key)); list.append(button);
+      });
+    }
+    async function openTicket(key) {
+      try { const [ticket, notes] = await Promise.all([request(`/api/v1/tickets/${encodeURIComponent(key)}?project=${encodeURIComponent(state.project)}`), request(`/api/v1/tickets/${encodeURIComponent(key)}/notes?project=${encodeURIComponent(state.project)}`)]); renderDetail(ticket, notes); $("drawer").classList.add("open"); $("overlay").classList.add("open"); }
+      catch (error) { showError(error.message); }
+    }
+    function renderDetail(ticket, notes) {
+      $("detail-key").textContent = ticket.key;
+      const detail = $("detail"); detail.replaceChildren(); detail.append(element("h2", ticket.title, "detail-title"));
+      const metadata = element("dl", undefined, "metadata");
+      const area = ticket.area_id ? (state.areas.find(item => item.id === ticket.area_id)?.name || `Area ${ticket.area_id}`) : "None";
+      [["Status", ticket.status], ["Type", ticket.type], ["Priority", ticket.priority], ["Flagged", ticket.flagged ? "Yes" : "No"], ["Area", area], ["Parent", ticket.parent_key || "None"], ["Revision", String(ticket.revision)], ["Created", formatDate(ticket.created_at)], ["Updated", formatDate(ticket.updated_at)]].forEach(([label, value]) => { metadata.append(element("dt", label)); metadata.append(element("dd", value)); });
+      detail.append(metadata); const description = element("section", undefined, "description"); description.append(element("h2", "Description")); description.append(element("pre", ticket.description || "No description.")); detail.append(description);
+      if (ticket.cancellation_reason) { const cancellation = element("section", undefined, "description"); cancellation.append(element("h2", "Cancellation reason")); cancellation.append(element("pre", ticket.cancellation_reason)); detail.append(cancellation); }
+      const activity = element("section", undefined, "description"); activity.append(element("h2", "Notes"));
+      if (!notes.length) activity.append(element("p", "No notes."));
+      notes.forEach(note => { const entry = element("div", undefined, "note"); entry.append(element("strong", note.actor || (note.kind === "cancellation" ? "Karya" : "Unattributed"))); entry.append(element("span", ` · ${formatDate(note.created_at)} · ${note.kind}`, "ticket-meta")); entry.append(element("pre", note.body)); activity.append(entry); }); detail.append(activity);
+    }
+    function formatDate(value) { const date = new Date(value); return Number.isNaN(date.valueOf()) ? "Unknown" : date.toLocaleString(); }
+    $("menu").addEventListener("click", () => { $("sidebar").classList.add("open"); $("overlay").classList.add("open"); });
+    $("overlay").addEventListener("click", () => { closeNavigation(); closeDetail(); });
+    $("close").addEventListener("click", closeDetail);
+    document.addEventListener("keydown", event => { if (event.key === "Escape") { closeNavigation(); closeDetail(); } });
+    filters.forEach(name => $(name).addEventListener(name === "search" ? "input" : "change", () => { clearTimeout(state.searchTimer); state.searchTimer = setTimeout(loadTickets, name === "search" ? 200 : 0); }));
+    loadProjects();
+  </script>
 </body>
 </html>

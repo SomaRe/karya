@@ -1,98 +1,75 @@
-# Karya — Design Spec
+# Karya Design Specification
 
-## What It Is
+## Purpose
 
-A filesystem-native project tracker for a single human + AI agents. The CLI is the primary interface, with an embedded read-only local web UI for browsing. There is no auth or remote service.
+Karya is a local project tracker for a single human and AI agents. It is a Go single binary with a CLI as its write interface and an embedded local web UI for read-only browsing. There is no authentication or remote service.
 
-## Language
-
-Go — single binary, fast, easy to distribute.
-
-## Hierarchy
+## Data Model
 
 ```
-Project → Epic → Ticket
+Project -> optional Area -> Ticket -> Note
 ```
 
-- **Project** — top-level unit of work (e.g. `my-app`)
-- **Epic** — a theme or goal grouping related tickets (e.g. `user-auth`)
-- **Ticket** — the actual unit of work; type is `task`, `bug`, or `spike`
+- A **Project** is the top-level unit of work. Its key is uppercase alphanumeric, such as `KARYA` or `APP2`.
+- An **Area** groups tickets within one project.
+- A **Ticket** is a unit of work. Its key is `<PROJECT_KEY>-<number>`, such as `KARYA-42`.
+- A Ticket may have one parent Ticket in the same project. Parenting is assigned only when creating the child; child statuses do not roll up automatically.
+- A **Note** is an append-only observation with a Karya-generated UTC timestamp and optional unauthenticated actor label.
 
-No sprints. No stories. No sub-tasks (for now).
+Tickets have these constrained fields:
 
-## Storage Layout
+| Field | Default | Allowed values |
+| --- | --- | --- |
+| `status` | `backlog` | `backlog`, `in-progress`, `review`, `done`, `cancelled` |
+| `priority` | `medium` | `low`, `medium`, `high` |
+| `type` | `task` | `task`, `bug`, `spike` |
 
-Central location: `~/.config/karya/projects/`
+Tickets expose a revision value. An update that supplies `--revision` succeeds only when that value matches the ticket's current revision; otherwise it reports a conflict.
 
-```
-~/.config/karya/projects/
-└── my-app/
-    ├── .karya.toml         # project config (name, ID prefix)
-    └── user-auth/          # epic (folder)
-        ├── MYAPP-001/      # ticket folder
-        │   ├── ticket.md
-        │   └── mockup.png  # attachments live alongside ticket.md
-        └── MYAPP-002/
-            └── ticket.md
-```
+Cancellation requires a nonblank reason. The current reason is stored on the Ticket and a cancellation Note is appended in the same transaction. Leaving `cancelled` clears the current reason but does not remove historical Notes. Area movement preserves the Ticket key and requires revision protection. Appending an ordinary Note does not mutate the Ticket revision.
 
-## ticket.md
+## Storage
 
-Frontmatter (YAML between `---`) holds structured fields. Body is free-form markdown for description, notes, links.
+All persistent application data is stored in SQLite at:
 
-```markdown
----
-id: MYAPP-001
-title: Login page
-type: task
-status: backlog
-priority: medium
-epic: user-auth
-flagged: false
----
-
-Description, notes, links go here.
+```text
+~/.config/karya/karya.db
 ```
 
-`created` and `modified` are derived from filesystem metadata — not stored in frontmatter.
+This replaces the former filesystem/Markdown design. There is no migration path and no backward compatibility layer: the SQLite implementation must not scan, import, or write the prior project folders, TOML config, YAML frontmatter, or `ticket.md` files.
 
-## Fields
+## CLI Contract
 
-| Field      | Required | Default    | Values                              |
-|------------|----------|------------|-------------------------------------|
-| `id`       | yes      | auto       | `<PREFIX>-<NNN>`                    |
-| `title`    | yes      | —          | string                              |
-| `status`   | yes      | `backlog`  | `backlog` `in-progress` `review` `done` |
-| `type`     | no       | `task`     | `task` `bug` `spike`                |
-| `priority` | no       | `medium`   | `low` `medium` `high`               |
-| `epic`     | no       | —          | epic folder name                    |
-| `flagged`  | no       | `false`    | bool — marks impediments/blockers   |
+The command groups are:
 
-## Status Tracking
-
-Scan `ticket.md` frontmatter on every CLI command and web API request. There is no index or background process; at personal project scale this is instant.
-
-## CLI Shape
-
-```
-karya project new "My App" --prefix MYAPP
-karya project ls
-
-karya epic new "User Auth"
-karya epic ls
-
-karya ticket new "Login page" --epic user-auth [--type bug] [--priority high] [--description "..."]
-karya ticket ls [--epic user-auth] [--status in-progress] [--type bug] [--grep login] [--flagged] [--json]
-karya ticket set MYAPP-001 status in-progress
-karya ticket set MYAPP-001 priority high
-karya ticket set MYAPP-001 description "Updated description"
-karya ticket flag MYAPP-001        # toggle flagged
-karya ticket open MYAPP-001        # open ticket.md in $EDITOR
-karya ticket show MYAPP-001        # print ticket to stdout
+```text
+project create | list | get | delete
+area    create | list | get | delete
+ticket  create | list | get | update | delete
+ticket note add | list
 ```
 
-`--json` flag on list commands for AI agent consumption.
+Every Area and Ticket command requires `--project <PROJECT_KEY>`, including `get`, `list`, `update`, and `delete`. Karya does not retain or infer an active project.
 
-## Web UI
+Every command that returns a resource or collection supports `--json`. This is the stable machine-readable interface for agents. The CLI is the supported write surface.
 
-`karya serve [--port 8787]` starts an embedded local server, defaulting to `http://localhost:8787`. The UI browses projects, epics, and tickets through read-only HTTP endpoints; create and edit data through the CLI or the Markdown files.
+`karya docs` prints the embedded agent guide without opening the database. It
+is the first command an unfamiliar agent should run.
+
+Example workflow:
+
+```bash
+karya project create "Karya" --key KARYA
+karya area create "Architecture" --project KARYA
+karya ticket create "Add SQLite storage" --project KARYA --area architecture --priority high
+karya ticket get KARYA-42 --project KARYA --json
+karya ticket update KARYA-42 --project KARYA --status in-progress --revision 3
+```
+
+## Web UI and API
+
+`karya serve [--port 8787]` serves the embedded UI locally. Both the human UI and HTTP API are strictly read-only. They may expose project, Area, Ticket, parent, cancellation, and Note data for browsing, but may not create, update, or delete records.
+
+## Agent Safety
+
+Agents must use CLI commands for writes and must never open or modify `karya.db` directly. Before any mutation, an agent discovers the target project and lists or gets the relevant Area or Ticket. Deletes and other destructive actions require explicit user direction. Agents should use `--json` for discovery and use the revision returned by a ticket read when updating a ticket.

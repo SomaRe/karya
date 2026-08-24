@@ -2,25 +2,20 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"text/tabwriter"
 
-	"github.com/somare/karya/internal/config"
-	"github.com/somare/karya/internal/model"
-	"github.com/somare/karya/internal/store"
 	"github.com/spf13/cobra"
 )
 
+var projectCreateKey string
+
 func init() {
 	rootCmd.AddCommand(projectCmd)
-	rootCmd.AddCommand(useCmd)
-
-	projectCmd.AddCommand(projectNewCmd)
-	projectCmd.AddCommand(projectLsCmd)
-
-	projectNewCmd.Flags().StringVar(&projectNewPrefix, "prefix", "", "ID prefix (e.g. MYAPP)")
-	projectNewCmd.MarkFlagRequired("prefix")
+	projectCmd.AddCommand(projectCreateCmd, projectListCmd, projectGetCmd, projectDeleteCmd)
+	projectCreateCmd.Flags().StringVar(&projectCreateKey, "key", "", "Project key")
+	projectCreateCmd.MarkFlagRequired("key")
+	projectDeleteCmd.Flags().Bool("yes", false, "Confirm deletion")
+	projectDeleteCmd.MarkFlagRequired("yes")
 }
 
 var projectCmd = &cobra.Command{
@@ -28,94 +23,93 @@ var projectCmd = &cobra.Command{
 	Short: "Manage projects",
 }
 
-// --- project new ---
-
-var projectNewPrefix string
-
-var projectNewCmd = &cobra.Command{
-	Use:   "new <name>",
-	Short: "Create a new project",
+var projectCreateCmd = &cobra.Command{
+	Use:   "create <name>",
+	Short: "Create a project",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		name := args[0]
-		projectsDir := config.ProjectsDir()
-		slug := filepath.Join(projectsDir, toProjectSlug(name))
-
-		if _, err := os.Stat(slug); err == nil {
-			return fmt.Errorf("project %q already exists", name)
-		}
-
-		p := &model.Project{Name: name, Prefix: projectNewPrefix}
-		if err := store.WriteProjectConfig(slug, p); err != nil {
+		svc, err := serviceFor(cmd)
+		if err != nil {
 			return err
 		}
-
-		fmt.Printf("Created project %q (prefix: %s) at %s\n", name, projectNewPrefix, slug)
-		return nil
+		project, err := svc.CreateProject(commandContext(), projectCreateKey, args[0])
+		if err != nil {
+			return err
+		}
+		return writeResource(cmd, project, func() error {
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Created project %s: %s\n", project.Key, project.Name)
+			return err
+		})
 	},
 }
 
-// --- project ls ---
-
-var projectLsCmd = &cobra.Command{
-	Use:   "ls",
-	Short: "List all projects",
+var projectListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List projects",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load()
+		svc, err := serviceFor(cmd)
 		if err != nil {
 			return err
 		}
-		projects, err := store.ListProjects(config.ProjectsDir())
+		projects, err := svc.ListProjects(commandContext())
 		if err != nil {
 			return err
 		}
-		if len(projects) == 0 {
-			fmt.Println("No projects. Run: karya project new <name> --prefix <PREFIX>")
-			return nil
-		}
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "NAME\tPREFIX\t")
-		for _, p := range projects {
-			active := ""
-			if p.Name == cfg.ActiveProject {
-				active = "*"
+		return writeResource(cmd, projects, func() error {
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "KEY\tNAME")
+			for _, project := range projects {
+				fmt.Fprintf(w, "%s\t%s\n", project.Key, project.Name)
 			}
-			fmt.Fprintf(w, "%s%s\t%s\t\n", active, p.Name, p.Prefix)
-		}
-		return w.Flush()
+			return w.Flush()
+		})
 	},
 }
 
-// --- use ---
-
-var useCmd = &cobra.Command{
-	Use:   "use <project>",
-	Short: "Set the active project",
+var projectGetCmd = &cobra.Command{
+	Use:   "get <key>",
+	Short: "Get a project",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		name := args[0]
-		projects, err := store.ListProjects(config.ProjectsDir())
+		svc, err := serviceFor(cmd)
 		if err != nil {
 			return err
 		}
-		for _, p := range projects {
-			if p.Name == name {
-				cfg, err := config.Load()
-				if err != nil {
-					return err
-				}
-				cfg.ActiveProject = name
-				if err := config.Save(cfg); err != nil {
-					return err
-				}
-				fmt.Printf("Active project set to %q\n", name)
-				return nil
-			}
+		project, err := svc.GetProject(commandContext(), args[0])
+		if err != nil {
+			return err
 		}
-		return fmt.Errorf("project %q not found", name)
+		return writeResource(cmd, project, func() error {
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\n", project.Key, project.Name)
+			return err
+		})
 	},
 }
 
-func toProjectSlug(name string) string {
-	return name
+var projectDeleteCmd = &cobra.Command{
+	Use:   "delete <key>",
+	Short: "Delete a project",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		yes, err := cmd.Flags().GetBool("yes")
+		if err != nil {
+			return err
+		}
+		if !yes {
+			return fmt.Errorf("--yes must be true")
+		}
+		svc, err := serviceFor(cmd)
+		if err != nil {
+			return err
+		}
+		project, err := svc.GetProject(commandContext(), args[0])
+		if err != nil {
+			return err
+		}
+		if err := svc.DeleteProject(commandContext(), project.Key); err != nil {
+			return err
+		}
+		return writeDeleted(cmd, project.Key)
+	},
 }

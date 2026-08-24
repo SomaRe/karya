@@ -1,41 +1,51 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 	"text/tabwriter"
+	"time"
 
-	"github.com/somare/karya/internal/model"
-	"github.com/somare/karya/internal/store"
+	"github.com/somare/karya/internal/domain"
+	"github.com/somare/karya/internal/service"
 	"github.com/spf13/cobra"
 )
 
 func init() {
 	rootCmd.AddCommand(ticketCmd)
-	ticketCmd.AddCommand(ticketNewCmd)
-	ticketCmd.AddCommand(ticketSetCmd)
-	ticketCmd.AddCommand(ticketFlagCmd)
-	ticketCmd.AddCommand(ticketDeleteCmd)
-	ticketCmd.AddCommand(ticketShowCmd)
-	ticketCmd.AddCommand(ticketOpenCmd)
-	ticketCmd.AddCommand(ticketLsCmd)
+	ticketCmd.AddCommand(ticketCreateCmd, ticketListCmd, ticketGetCmd, ticketUpdateCmd, ticketDeleteCmd, ticketNoteCmd)
+	ticketNoteCmd.AddCommand(ticketNoteAddCmd, ticketNoteListCmd)
 
-	ticketNewCmd.Flags().StringVar(&ticketNewEpic, "epic", "", "Epic name")
-	ticketNewCmd.Flags().StringVar(&ticketNewType, "type", "task", "Ticket type (task|bug|spike)")
-	ticketNewCmd.Flags().StringVar(&ticketNewPriority, "priority", "medium", "Priority (low|medium|high)")
-	ticketNewCmd.Flags().StringVarP(&ticketNewDescription, "description", "d", "", "Ticket description / body")
-	ticketNewCmd.MarkFlagRequired("epic")
+	for _, command := range []*cobra.Command{ticketCreateCmd, ticketListCmd, ticketGetCmd, ticketUpdateCmd, ticketDeleteCmd, ticketNoteAddCmd, ticketNoteListCmd} {
+		command.Flags().String("project", "", "Project key")
+		command.MarkFlagRequired("project")
+	}
+	ticketCreateCmd.Flags().String("area", "", "Area slug")
+	ticketCreateCmd.Flags().String("parent", "", "Parent ticket key")
+	ticketCreateCmd.Flags().String("description", "", "Ticket description")
+	ticketCreateCmd.Flags().String("type", "task", "Ticket type (task|bug|spike)")
+	ticketCreateCmd.Flags().String("priority", "medium", "Ticket priority (low|medium|high)")
 
-	ticketLsCmd.Flags().StringVar(&ticketLsEpic, "epic", "", "Filter by epic")
-	ticketLsCmd.Flags().StringVar(&ticketLsStatus, "status", "", "Filter by status")
-	ticketLsCmd.Flags().StringVar(&ticketLsType, "type", "", "Filter by type (task|bug|spike)")
-	ticketLsCmd.Flags().StringVar(&ticketLsGrep, "grep", "", "Filter by text in title (case-insensitive)")
-	ticketLsCmd.Flags().BoolVar(&ticketLsFlagged, "flagged", false, "Show only flagged tickets")
-	ticketLsCmd.Flags().BoolVar(&ticketLsJSON, "json", false, "Output as JSON")
+	ticketListCmd.Flags().String("area", "", "Filter by area slug")
+	ticketListCmd.Flags().String("parent", "", "Filter by parent ticket key")
+	ticketListCmd.Flags().String("status", "", "Filter by status")
+	ticketListCmd.Flags().String("type", "", "Filter by type")
+	ticketListCmd.Flags().String("priority", "", "Filter by priority")
+	ticketListCmd.Flags().String("search", "", "Search ticket titles")
+	ticketListCmd.Flags().Bool("flagged", false, "Filter by flagged state")
+
+	ticketUpdateCmd.Flags().String("title", "", "Ticket title")
+	ticketUpdateCmd.Flags().String("description", "", "Ticket description")
+	ticketUpdateCmd.Flags().String("area", "", "Area slug; pass an empty value to clear")
+	ticketUpdateCmd.Flags().String("type", "", "Ticket type")
+	ticketUpdateCmd.Flags().String("status", "", "Ticket status")
+	ticketUpdateCmd.Flags().String("reason", "", "Cancellation reason")
+	ticketUpdateCmd.Flags().String("priority", "", "Ticket priority")
+	ticketUpdateCmd.Flags().Bool("flagged", false, "Ticket flagged state")
+	ticketUpdateCmd.Flags().Int64("revision", 0, "Expected ticket revision")
+
+	ticketDeleteCmd.Flags().Bool("yes", false, "Confirm deletion")
+	ticketDeleteCmd.MarkFlagRequired("yes")
+	ticketNoteAddCmd.Flags().String("actor", "", "Optional actor label")
 }
 
 var ticketCmd = &cobra.Command{
@@ -43,265 +53,245 @@ var ticketCmd = &cobra.Command{
 	Short: "Manage tickets",
 }
 
-// --- ticket new ---
+var ticketNoteCmd = &cobra.Command{
+	Use:   "note",
+	Short: "Manage append-only ticket notes",
+}
 
-var ticketNewEpic, ticketNewType, ticketNewPriority, ticketNewDescription string
-
-var ticketNewCmd = &cobra.Command{
-	Use:   "new <title>",
-	Short: "Create a new ticket",
+var ticketCreateCmd = &cobra.Command{
+	Use:   "create <title>",
+	Short: "Create a ticket",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectDir, err := activeProjectDir()
+		input := service.TicketCreateInput{ProjectKey: flagString(cmd, "project"), AreaSlug: flagString(cmd, "area"), ParentKey: flagString(cmd, "parent"), Title: args[0], Description: flagString(cmd, "description"), Type: domain.TicketType(flagString(cmd, "type")), Priority: domain.Priority(flagString(cmd, "priority"))}
+		svc, err := serviceFor(cmd)
 		if err != nil {
 			return err
 		}
-		p, err := store.ReadProjectConfig(projectDir)
+		ticket, err := svc.CreateTicket(commandContext(), input)
 		if err != nil {
 			return err
 		}
-
-		epicDir := filepath.Join(projectDir, ticketNewEpic)
-		if _, err := os.Stat(epicDir); err != nil {
-			return fmt.Errorf("epic %q not found — run: karya epic new %q", ticketNewEpic, ticketNewEpic)
-		}
-
-		id, err := store.NextID(projectDir, p.Prefix)
-		if err != nil {
+		return writeResource(cmd, ticket, func() error {
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Created ticket %s: %s\n", ticket.Key, ticket.Title)
 			return err
-		}
-
-		t := &model.Ticket{
-			ID:       id,
-			Title:    args[0],
-			Type:     model.TicketType(ticketNewType),
-			Status:   model.StatusBacklog,
-			Priority: model.Priority(ticketNewPriority),
-			Epic:     ticketNewEpic,
-			Flagged:  false,
-			Body:     ticketNewDescription,
-			Dir:      filepath.Join(epicDir, id),
-		}
-		if err := store.WriteTicket(t); err != nil {
-			return err
-		}
-		fmt.Printf("Created ticket %s: %s\n", t.ID, t.Title)
-		return nil
+		})
 	},
 }
 
-// --- ticket set ---
-
-var ticketSetCmd = &cobra.Command{
-	Use:   "set <id> <field> <value>",
-	Short: "Update a ticket field (status, priority, type)",
-	Args:  cobra.ExactArgs(3),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		projectDir, err := activeProjectDir()
-		if err != nil {
-			return err
-		}
-		t, err := store.FindTicket(projectDir, args[0])
-		if err != nil {
-			return err
-		}
-		field, value := args[1], args[2]
-		switch field {
-		case "status":
-			t.Status = model.Status(value)
-		case "priority":
-			t.Priority = model.Priority(value)
-		case "type":
-			t.Type = model.TicketType(value)
-		case "description":
-			t.Body = value
-		default:
-			return fmt.Errorf("unknown field %q — supported: status, priority, type, description", field)
-		}
-		if err := store.WriteTicket(t); err != nil {
-			return err
-		}
-		fmt.Printf("Updated %s: %s = %s\n", t.ID, field, value)
-		return nil
-	},
-}
-
-// --- ticket flag ---
-
-var ticketFlagCmd = &cobra.Command{
-	Use:   "flag <id>",
-	Short: "Toggle the flagged field on a ticket",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		projectDir, err := activeProjectDir()
-		if err != nil {
-			return err
-		}
-		t, err := store.FindTicket(projectDir, args[0])
-		if err != nil {
-			return err
-		}
-		t.Flagged = !t.Flagged
-		if err := store.WriteTicket(t); err != nil {
-			return err
-		}
-		state := "flagged"
-		if !t.Flagged {
-			state = "unflagged"
-		}
-		fmt.Printf("%s is now %s\n", t.ID, state)
-		return nil
-	},
-}
-
-// --- ticket show ---
-
-var ticketShowCmd = &cobra.Command{
-	Use:   "show <id>",
-	Short: "Print a ticket to stdout",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		projectDir, err := activeProjectDir()
-		if err != nil {
-			return err
-		}
-		t, err := store.FindTicket(projectDir, args[0])
-		if err != nil {
-			return err
-		}
-		flagged := ""
-		if t.Flagged {
-			flagged = " [FLAGGED]"
-		}
-		fmt.Printf("%-10s %s%s\n", t.ID, t.Title, flagged)
-		fmt.Printf("  Status:   %s\n", t.Status)
-		fmt.Printf("  Type:     %s\n", t.Type)
-		fmt.Printf("  Priority: %s\n", t.Priority)
-		fmt.Printf("  Epic:     %s\n", t.Epic)
-		fmt.Printf("  Created:  %s\n", t.Created.Format("2006-01-02 15:04"))
-		fmt.Printf("  Modified: %s\n", t.Modified.Format("2006-01-02 15:04"))
-		if t.Body != "" {
-			fmt.Printf("\n%s\n", t.Body)
-		}
-		return nil
-	},
-}
-
-// --- ticket open ---
-
-var ticketOpenCmd = &cobra.Command{
-	Use:   "open <id>",
-	Short: "Open ticket.md in $EDITOR",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		projectDir, err := activeProjectDir()
-		if err != nil {
-			return err
-		}
-		t, err := store.FindTicket(projectDir, args[0])
-		if err != nil {
-			return err
-		}
-		editor := os.Getenv("EDITOR")
-		if editor == "" {
-			editor = "nano"
-		}
-		c := exec.Command(editor, filepath.Join(t.Dir, "ticket.md"))
-		c.Stdin = os.Stdin
-		c.Stdout = os.Stdout
-		c.Stderr = os.Stderr
-		return c.Run()
-	},
-}
-
-// --- ticket ls ---
-
-var ticketLsEpic, ticketLsStatus, ticketLsType, ticketLsGrep string
-var ticketLsFlagged, ticketLsJSON bool
-
-var ticketLsCmd = &cobra.Command{
-	Use:   "ls",
+var ticketListCmd = &cobra.Command{
+	Use:   "list",
 	Short: "List tickets",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectDir, err := activeProjectDir()
+		input := service.TicketListInput{ProjectKey: flagString(cmd, "project"), AreaSlug: flagString(cmd, "area"), ParentKey: flagString(cmd, "parent"), Status: flagString(cmd, "status"), Type: flagString(cmd, "type"), Priority: flagString(cmd, "priority"), Search: flagString(cmd, "search")}
+		if cmd.Flags().Changed("flagged") {
+			flagged, err := cmd.Flags().GetBool("flagged")
+			if err != nil {
+				return err
+			}
+			input.Flagged = &flagged
+		}
+		svc, err := serviceFor(cmd)
 		if err != nil {
 			return err
 		}
-		tickets, err := store.ListTickets(projectDir)
+		tickets, err := svc.ListTickets(commandContext(), input)
 		if err != nil {
 			return err
 		}
-
-		// apply filters
-		filtered := tickets[:0]
-		for _, t := range tickets {
-			if ticketLsEpic != "" && t.Epic != ticketLsEpic {
-				continue
+		return writeResource(cmd, tickets, func() error {
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "KEY\tTITLE\tSTATUS\tPRIORITY\tAREA ID\tPARENT\tFLAGGED\tREVISION")
+			for _, ticket := range tickets {
+				areaID := ""
+				if ticket.AreaID != nil {
+					areaID = fmt.Sprint(*ticket.AreaID)
+				}
+				parent := ""
+				if ticket.ParentKey != nil {
+					parent = *ticket.ParentKey
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%t\t%d\n", ticket.Key, ticket.Title, ticket.Status, ticket.Priority, areaID, parent, ticket.Flagged, ticket.Revision)
 			}
-			if ticketLsStatus != "" && string(t.Status) != ticketLsStatus {
-				continue
-			}
-			if ticketLsFlagged && !t.Flagged {
-				continue
-			}
-			if ticketLsType != "" && string(t.Type) != ticketLsType {
-				continue
-			}
-			if ticketLsGrep != "" && !strings.Contains(strings.ToLower(t.Title), strings.ToLower(ticketLsGrep)) {
-				continue
-			}
-			filtered = append(filtered, t)
-		}
-		store.SortTickets(filtered)
-
-		if ticketLsJSON {
-			return json.NewEncoder(os.Stdout).Encode(filtered)
-		}
-
-		if len(filtered) == 0 {
-			fmt.Println("No tickets found.")
-			return nil
-		}
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tTITLE\tSTATUS\tPRIORITY\tEPIC\tFLAGGED")
-		for _, t := range filtered {
-			flagged := ""
-			if t.Flagged {
-				flagged = "!"
-			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-				t.ID, t.Title, t.Status, t.Priority, t.Epic, flagged)
-		}
-		return w.Flush()
+			return w.Flush()
+		})
 	},
 }
 
-// --- ticket delete ---
+var ticketGetCmd = &cobra.Command{
+	Use:   "get <key>",
+	Short: "Get a ticket",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		svc, err := serviceFor(cmd)
+		if err != nil {
+			return err
+		}
+		ticket, err := svc.GetTicket(commandContext(), flagString(cmd, "project"), args[0])
+		if err != nil {
+			return err
+		}
+		return writeResource(cmd, ticket, func() error {
+			parent := "None"
+			if ticket.ParentKey != nil {
+				parent = *ticket.ParentKey
+			}
+			reason := ""
+			if ticket.CancellationReason != nil {
+				reason = "\nCancellation reason: " + *ticket.CancellationReason
+			}
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\t%s\t%t\t%d\nParent: %s%s\n", ticket.Key, ticket.Title, ticket.Status, ticket.Priority, ticket.Flagged, ticket.Revision, parent, reason)
+			return err
+		})
+	},
+}
+
+var ticketUpdateCmd = &cobra.Command{
+	Use:   "update <key>",
+	Short: "Update a ticket",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		input := service.TicketUpdateInput{ProjectKey: flagString(cmd, "project"), Key: args[0]}
+		if cmd.Flags().Changed("title") {
+			value := flagString(cmd, "title")
+			input.Title = &value
+		}
+		if cmd.Flags().Changed("description") {
+			value := flagString(cmd, "description")
+			input.Description = &value
+		}
+		if cmd.Flags().Changed("area") {
+			value := flagString(cmd, "area")
+			input.AreaSlug = &value
+		}
+		if cmd.Flags().Changed("type") {
+			value := domain.TicketType(flagString(cmd, "type"))
+			input.Type = &value
+		}
+		if cmd.Flags().Changed("status") {
+			value := domain.Status(flagString(cmd, "status"))
+			input.Status = &value
+		}
+		if cmd.Flags().Changed("reason") {
+			value := flagString(cmd, "reason")
+			input.Reason = &value
+		}
+		if cmd.Flags().Changed("priority") {
+			value := domain.Priority(flagString(cmd, "priority"))
+			input.Priority = &value
+		}
+		if cmd.Flags().Changed("flagged") {
+			value, err := cmd.Flags().GetBool("flagged")
+			if err != nil {
+				return err
+			}
+			input.Flagged = &value
+		}
+		if cmd.Flags().Changed("revision") {
+			value, err := cmd.Flags().GetInt64("revision")
+			if err != nil {
+				return err
+			}
+			input.Revision = &value
+		}
+		svc, err := serviceFor(cmd)
+		if err != nil {
+			return err
+		}
+		ticket, err := svc.UpdateTicket(commandContext(), input)
+		if err != nil {
+			return err
+		}
+		return writeResource(cmd, ticket, func() error {
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Updated ticket %s: %s\n", ticket.Key, ticket.Title)
+			return err
+		})
+	},
+}
+
+var ticketNoteAddCmd = &cobra.Command{
+	Use:   "add <key> <body>",
+	Short: "Append a note to a ticket",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var actor *string
+		if cmd.Flags().Changed("actor") {
+			value := flagString(cmd, "actor")
+			actor = &value
+		}
+		svc, err := serviceFor(cmd)
+		if err != nil {
+			return err
+		}
+		note, err := svc.AddTicketNote(commandContext(), flagString(cmd, "project"), args[0], args[1], actor)
+		if err != nil {
+			return err
+		}
+		return writeResource(cmd, note, func() error {
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Added note %d to %s\n", note.ID, args[0])
+			return err
+		})
+	},
+}
+
+var ticketNoteListCmd = &cobra.Command{
+	Use:   "list <key>",
+	Short: "List a ticket's notes",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		svc, err := serviceFor(cmd)
+		if err != nil {
+			return err
+		}
+		notes, err := svc.ListTicketNotes(commandContext(), flagString(cmd, "project"), args[0])
+		if err != nil {
+			return err
+		}
+		return writeResource(cmd, notes, func() error {
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "ID\tKIND\tACTOR\tCREATED\tBODY")
+			for _, note := range notes {
+				actor := ""
+				if note.Actor != nil {
+					actor = *note.Actor
+				}
+				fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", note.ID, note.Kind, actor, note.CreatedAt.Format(time.RFC3339), note.Body)
+			}
+			return w.Flush()
+		})
+	},
+}
 
 var ticketDeleteCmd = &cobra.Command{
-	Use:   "delete <id>",
-	Short: "Delete a ticket (removes its folder and all contents)",
+	Use:   "delete <key>",
+	Short: "Delete a ticket",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectDir, err := activeProjectDir()
+		yes, err := cmd.Flags().GetBool("yes")
 		if err != nil {
 			return err
 		}
-		t, err := store.FindTicket(projectDir, args[0])
+		if !yes {
+			return fmt.Errorf("--yes must be true")
+		}
+		svc, err := serviceFor(cmd)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Delete ticket %s (%s)? [y/N] ", t.ID, t.Title)
-		var confirm string
-		fmt.Scanln(&confirm)
-		if confirm != "y" && confirm != "Y" {
-			fmt.Println("Aborted.")
-			return nil
-		}
-		if err := os.RemoveAll(t.Dir); err != nil {
+		project := flagString(cmd, "project")
+		ticket, err := svc.GetTicket(commandContext(), project, args[0])
+		if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s\n", t.ID)
-		return nil
+		if err := svc.DeleteTicket(commandContext(), project, ticket.Key); err != nil {
+			return err
+		}
+		return writeDeleted(cmd, ticket.Key)
 	},
+}
+
+func flagString(cmd *cobra.Command, name string) string {
+	value, _ := cmd.Flags().GetString(name)
+	return value
 }

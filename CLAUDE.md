@@ -1,130 +1,58 @@
 # Karya — CLAUDE.md
 
-## What It Is
+## Product Contract
 
-A filesystem-native project tracker for a single human + AI agents. It has a CLI and an embedded, read-only local web UI; there is no auth or remote server. Sanskrit: कार्य (work/task/deed).
+Karya is a local project tracker for a single human and AI agents. Its architecture is SQLite at `~/.config/karya/karya.db`, a CLI write interface, and an embedded read-only local web UI and HTTP API. There is no authentication, remote service, active-project setting, migration, or backward compatibility with the former filesystem/Markdown store.
 
-## Language & Build
+## Build and Test
 
-- **Go** — single binary, fast, easy to distribute
-- Build: `make build` → `./karya`
-- Install system-wide: `make install` → `/usr/local/bin/karya`
-- Test: `make test`
-- Go binary: `/usr/local/go/bin/go`
+- Language: Go, distributed as a single `karya` binary.
+- Build: `make build` produces `./karya`.
+- Test: `make test` runs `go test ./...`.
+- Clean: `make clean` removes the built binary.
+- Install: `make install` installs `/usr/local/bin/karya` and requires appropriate privileges.
+- Go binary on this machine: `/usr/local/go/bin/go`.
 
-## Hierarchy
+Run `make test` after Go changes. Documentation-only changes do not require a build or test run.
 
-```
-Project → Epic → Ticket
-```
-
-- **Project** — top-level unit of work
-- **Epic** — folder grouping related tickets (slug-named, e.g. `user-auth`)
-- **Ticket** — actual unit of work; type is `task`, `bug`, or `spike`
-
-## Storage Layout
-
-All data lives at `~/.config/karya/`:
+## Target Model
 
 ```
-~/.config/karya/
-├── config.toml                  # global config (active_project)
-└── projects/
-    └── My App/
-        ├── .karya.toml          # project config (name, prefix)
-        └── user-auth/           # epic (folder)
-            └── MYAPP-001/       # ticket folder
-                ├── ticket.md
-                └── <attachments>
+Project -> Area -> Ticket
 ```
 
-## ticket.md Format
+- Project keys are uppercase alphanumeric, for example `KARYA`.
+- Ticket keys are `<PROJECT_KEY>-<number>`, for example `KARYA-42`.
+- Ticket status: `backlog`, `in-progress`, `review`, `done`, `cancelled`.
+- Ticket priority: `low`, `medium`, `high`.
+- Ticket type: `task`, `bug`, `spike`.
+- Ticket updates may use `--revision` for optimistic conflict protection.
 
-YAML frontmatter between `---`, free-form markdown body below.
+All Area and Ticket operations require `--project <PROJECT_KEY>`. Commands that return a resource or collection support `--json`. Tickets support creation-only parents, revision-safe Area moves, cancellation reasons, and append-only timestamped Notes through `ticket note add/list`.
 
-```markdown
----
-id: MYAPP-001
-title: Login page
-type: task
-status: backlog
-priority: medium
-epic: user-auth
-flagged: false
----
+## Agent Rules
 
-Description, notes, links go here.
-```
+- Never write to, query for mutation through, or otherwise modify `~/.config/karya/karya.db` directly. Use the CLI.
+- Before any mutation, discover the project and list or get the relevant Area or Ticket. Use `--json` for machine-readable discovery.
+- Before updating a ticket, get it and pass its observed revision with `--revision` when conflict protection is needed.
+- Do not run `delete` or another destructive action without explicit user authorization.
+- The UI and HTTP API are human-browsing surfaces only and must remain read-only.
 
-`created` and `modified` are derived from filesystem metadata — not stored in frontmatter.
+## Target Layout
 
-## Fields
+The implementation uses this layout:
 
-| Field      | Required | Default    | Values                                      |
-|------------|----------|------------|---------------------------------------------|
-| `id`       | yes      | auto       | `<PREFIX>-<NNN>`                            |
-| `title`    | yes      | —          | string                                      |
-| `status`   | yes      | `backlog`  | `backlog` `in-progress` `review` `done`     |
-| `type`     | no       | `task`     | `task` `bug` `spike`                        |
-| `priority` | no       | `medium`   | `low` `medium` `high`                       |
-| `epic`     | no       | —          | epic folder name (slug)                     |
-| `flagged`  | no       | `false`    | bool — marks impediments/blockers           |
-
-## CLI Reference
-
-```bash
-# Projects
-karya project new "My App" --prefix MYAPP
-karya project ls
-karya use <project>
-
-# Epics
-karya epic new "User Auth"
-karya epic ls
-
-# Tickets
-karya ticket new "Login page" --epic user-auth [--type bug] [--priority high] [--description "..."]
-karya ticket ls [--epic user-auth] [--status in-progress] [--type bug] [--grep login] [--flagged] [--json]
-karya ticket set MYAPP-001 status in-progress
-karya ticket set MYAPP-001 priority high
-karya ticket set MYAPP-001 description "Updated description"
-karya ticket flag MYAPP-001        # toggle flagged
-karya ticket show MYAPP-001        # print ticket to stdout
-karya ticket open MYAPP-001        # open ticket.md in $EDITOR
-karya ticket delete MYAPP-001      # delete ticket (confirms first)
-
-# Web UI
-karya serve [--port 8787]
-```
-
-`--json` flag on `ticket ls` for AI agent consumption.
-
-## Code Structure
-
-```
+```text
 karya/
-├── main.go                   # entry point
-├── Makefile                  # build / install
-├── cmd/
-│   ├── root.go               # root cobra command + Execute()
-│   ├── project.go            # project new, project ls, use
-│   ├── epic.go               # epic new, epic ls; activeProjectDir() helper
-│   ├── ticket.go             # ticket new, set, flag, show, open, ls
-│   ├── serve.go              # embedded local web UI server
-│   └── web/index.html        # embedded web UI assets
+├── main.go                    # entry point
+├── Makefile                   # build, test, install, clean
+├── cmd/                       # Cobra root, project, area, ticket, and serve commands
+├── cmd/web/                   # embedded read-only UI assets
 └── internal/
-    ├── api/handler.go        # read-only web UI API
-    ├── model/model.go        # Ticket, Epic, Project structs; Status/Priority/Type enums
-    ├── store/store.go        # read/write tickets+epics+projects; NextID; SortTickets
-    └── config/config.go      # global config (active project); ProjectsDir()
+    ├── api/                   # read-only web API handlers
+    ├── domain/                # validated entities and enums
+    ├── service/               # key-based application operations
+    └── sqlite/                # database access and schema migrations
 ```
 
-## Dependencies
-
-- `github.com/spf13/cobra` — CLI framework
-- `gopkg.in/yaml.v3` — frontmatter parsing
-- `github.com/BurntSushi/toml` — project + global config
-
-## Status Scanning
-
-No index or background process. CLI commands and web API requests scan `ticket.md` frontmatter on demand, which is fast enough at personal-project scale.
+Do not retain a filesystem migration or compatibility layer in the target layout.
